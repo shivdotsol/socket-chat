@@ -15,6 +15,8 @@ dotenv.config();
 connectDB();
 
 const PORT = process.env.PORT || 3000;
+const CLIENT_URL =
+  process.env.CLIENT_URL || "https://socket-chat.shivtiwari.com";
 
 const app = express();
 app.use(cors());
@@ -22,7 +24,9 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/rooms", roomRoutes);
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: { origin: CLIENT_URL, methods: ["GET", "POST"] },
+});
 
 const onlineUsers = new Map();
 
@@ -43,10 +47,8 @@ io.on("connection", async (socket) => {
   const user = await User.findById(socket.userId);
   if (!user) return socket.disconnect();
 
-  onlineUsers.set(socket.userId, socket.id);
-  io.emit("onlineUsers", Array.from(onlineUsers.keys()));
-
-  console.log("Socket connected:", socket.id, "User:", socket.userId);
+  onlineUsers.set(socket.userId, user.name);
+  io.emit("onlineUsers", Array.from(onlineUsers.values()));
 
   socket.on("joinRoom", async (roomId) => {
     const room = await Room.findById(roomId);
@@ -57,7 +59,6 @@ io.on("connection", async (socket) => {
       createdAt: 1,
     });
     socket.emit("previousMessages", messages);
-    console.log(`User ${socket.userId} joined room ${roomId}`);
   });
 
   socket.on("sendMessage", async ({ roomId, text }) => {
@@ -81,7 +82,7 @@ io.on("connection", async (socket) => {
 
   socket.on("disconnect", () => {
     onlineUsers.delete(socket.userId);
-    io.emit("onlineUsers", Array.from(onlineUsers.keys()));
+    io.emit("onlineUsers", Array.from(onlineUsers.values()));
     console.log(`${user.name} disconnected`);
   });
 });
